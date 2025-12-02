@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zuhaowan App</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+        }
+        
+        h1 {
+            margin: 0 0 20px 0;
+            font-size: 2em;
+            text-align: center;
+        }
+        
+        p {
+            text-align: center;
+            opacity: 0.9;
+            line-height: 1.6;
+        }
+        
+        button {
+            width: 100%;
+            padding: 15px;
+            margin: 10px 0;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: white;
+            color: #667eea;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .status {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 14px;
+            opacity: 0.8;
+        }
+        
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 2px solid white;
+        }
+        
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌐 Zuhaowan App</h1>
+        <p>Click the button below to open the login window and authenticate with Zuhaowan.</p>
+        
+        <button id="openLoginBtn">Open Login Window</button>
+        <button id="closeLoginBtn" class="btn-secondary">Close Login Window</button>
+        <button id="checkStatusBtn" class="btn-secondary">Check Window Status</button>
+        
+        <div class="status" id="status">Ready</div>
+    </div>
+
+    <script type="module">
+        import { invoke } from '@tauri-apps/api/core';
+        import { listen } from '@tauri-apps/api/event';
+        
+        const openBtn = document.getElementById('openLoginBtn');
+        const closeBtn = document.getElementById('closeLoginBtn');
+        const checkBtn = document.getElementById('checkStatusBtn');
+        const status = document.getElementById('status');
+        
+        function setStatus(message, isError = false) {
+            status.textContent = message;
+            status.style.color = isError ? '#ff6b6b' : 'white';
+        }
+        
+        listen('login-window-opened', () => {
+            console.log('Login window opened event received');
+            setStatus('Login window opened');
+        });
+        
+        listen('login-window-closed', () => {
+            console.log('Login window closed event received');
+            setStatus('Login window closed');
+            setTimeout(() => setStatus('Ready'), 2000);
+        });
+        
+        openBtn.addEventListener('click', async () => {
+            try {
+                openBtn.disabled = true;
+                setStatus('Opening login window...');
+                await invoke('open_login_window');
+            } catch (error) {
+                setStatus(`Error: ${error}`, true);
+                console.error('Failed to open login window:', error);
+            } finally {
+                openBtn.disabled = false;
+            }
+        });
+        
+        closeBtn.addEventListener('click', async () => {
+            try {
+                closeBtn.disabled = true;
+                setStatus('Closing login window...');
+                await invoke('close_login_window');
+            } catch (error) {
+                setStatus(`Error: ${error}`, true);
+                console.error('Failed to close login window:', error);
+            } finally {
+                closeBtn.disabled = false;
+            }
+        });
+        
+        checkBtn.addEventListener('click', async () => {
+            try {
+                checkBtn.disabled = true;
+                const isOpen = await invoke('is_login_window_open');
+                setStatus(isOpen ? 'Login window is open' : 'Login window is closed');
+                setTimeout(() => setStatus('Ready'), 2000);
+            } catch (error) {
+                setStatus(`Error: ${error}`, true);
+                console.error('Failed to check window status:', error);
+            } finally {
+                checkBtn.disabled = false;
+            }
+        });
+        
+        setStatus('Ready');
+    </script>
+</body>
+</html>
