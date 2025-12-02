@@ -1,6 +1,6 @@
 # Tauri Auth Capture App
 
-A Tauri + Vue application that demonstrates capturing authentication tokens and cookies from third-party authentication pages using IPC communication.
+A modern Tauri + Vue 3 + Element-Plus application that demonstrates capturing authentication tokens and cookies from third-party authentication pages using IPC communication.
 
 ## Features
 
@@ -9,8 +9,11 @@ A Tauri + Vue application that demonstrates capturing authentication tokens and 
 - 🍪 **Cookie Capture**: Extracts cookies from authenticated pages using JavaScript injection
 - 📦 **LocalStorage/SessionStorage**: Captures data from browser storage
 - 🔄 **IPC Communication**: Uses Tauri events to send captured data from Rust to Vue
-- 📊 **Live Display**: Shows captured tokens and cookies in the main window UI
+- 📊 **Live Display**: Shows captured tokens and cookies in the main window UI with Element-Plus components
 - 🖥️ **Console Logging**: Logs all captured data to the browser console
+- 🎨 **Modern UI**: Beautiful, responsive interface built with Element-Plus
+- 📦 **State Management**: Centralized authentication state using Pinia
+- 🧪 **Mock Testing**: Test the flow with mock data before implementing real authentication
 
 ## Architecture
 
@@ -26,18 +29,30 @@ The Rust backend handles:
 
 Key components:
 - `open_auth_window`: Command to open authentication window
+- `send_mock_auth_data`: Command to send mock authentication data for testing
 - `setup_navigation_listener`: Sets up URL monitoring
 - `extract_token_from_url`: Parses tokens from URLs
 - `extract_auth_data_from_window`: Executes JS to capture cookies and storage
 
 ### Vue Frontend (`src/App.vue`)
 
-The Vue frontend:
+The Vue frontend features:
 
-1. **Event Listeners**: Listens for `auth-data-captured` events from Rust
-2. **State Management**: Stores captured tokens, cookies, and URLs in reactive refs
-3. **UI Display**: Shows captured authentication data in a clean interface
-4. **Console Logging**: Logs all captured data for debugging
+1. **Element-Plus UI**: Modern, beautiful component library for Vue 3
+2. **Event Listeners**: Listens for `auth-data-captured` events from Rust
+3. **Pinia Store**: Centralized state management in `src/stores/auth.ts`
+4. **Reactive UI**: Real-time updates when authentication data is captured
+5. **Console Logging**: Logs all captured data for debugging
+6. **Mock Testing**: Button to test with mock data without opening auth window
+
+### State Management (`src/stores/auth.ts`)
+
+The Pinia store manages:
+- Token state
+- Cookie collection
+- Authentication URL
+- Computed properties for authentication status
+- Actions to update and clear auth data
 
 ## How It Works
 
@@ -110,9 +125,11 @@ Modify the `extract_token_from_url` function to handle your specific token forma
 ## Technologies Used
 
 - **Tauri 2.0**: Native app framework
-- **Vue 3**: Frontend framework
+- **Vue 3**: Frontend framework with Composition API
+- **Element-Plus**: Modern Vue 3 component library
+- **Pinia**: State management for Vue 3
 - **TypeScript**: Type-safe JavaScript
-- **Vite**: Build tool
+- **Vite**: Build tool and dev server
 - **tauri-plugin-http**: HTTP client for Tauri
 
 ## API Reference
@@ -120,7 +137,12 @@ Modify the `extract_token_from_url` function to handle your specific token forma
 ### Tauri Commands
 
 #### `open_auth_window()`
-Opens a new authentication window.
+Opens a new authentication window for real authentication flow.
+
+**Returns**: `Promise<void>`
+
+#### `send_mock_auth_data()`
+Sends mock authentication data for testing purposes. Useful for development and testing the UI without performing real authentication.
 
 **Returns**: `Promise<void>`
 

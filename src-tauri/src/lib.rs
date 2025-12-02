@@ -152,6 +152,33 @@ fn extract_token_from_url(url: &str) -> Option<String> {
 }
 
 #[tauri::command]
+async fn send_mock_auth_data(app: tauri::AppHandle) -> Result<(), String> {
+    // Send mock authentication data for testing
+    let mock_data = AuthData {
+        token: Some("mock_jwt_token_abc123xyz789".to_string()),
+        cookies: vec![
+            CookieData {
+                name: "session_id".to_string(),
+                value: "sess_mock_12345".to_string(),
+            },
+            CookieData {
+                name: "auth_token".to_string(),
+                value: "auth_mock_67890".to_string(),
+            },
+        ],
+        url: "https://example.com/auth/callback?success=true".to_string(),
+    };
+    
+    println!("Sending mock auth data: {:?}", mock_data);
+    
+    // Emit the mock data via IPC
+    app.emit("auth-data-captured", mock_data)
+        .map_err(|e| e.to_string())?;
+    
+    Ok(())
+}
+
+#[tauri::command]
 async fn extract_auth_data_from_window(window: tauri::WebviewWindow) -> Result<String, String> {
     // Execute JavaScript to extract auth data
     let result = window.eval(
@@ -233,6 +260,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             open_auth_window,
+            send_mock_auth_data,
             extract_auth_data_from_window
         ])
         .run(tauri::generate_context!())
