@@ -72,10 +72,10 @@ fn open_login_window(app: AppHandle) -> Result<(), String> {
     let mut builder = WebviewWindowBuilder::new(&app, LOGIN_WINDOW_LABEL, WebviewUrl::External(url))
         .title("租号玩登录")
         .visible(true)
-        .center()
-        .decorations(true)
-        .closable(true)
         .resizable(true)
+        .closable(true)
+        .decorations(true)
+        .center()
         .transparent(false)
         .min_inner_size(360.0, 560.0)
         .inner_size(420.0, 720.0)
@@ -113,7 +113,7 @@ fn reload_login_window(app: AppHandle) -> Result<(), String> {
         window
             .eval("window.location.reload();")
             .map_err(|e| e.to_string())?;
-        emit_login_status(&app, "reload", "已发送刷新指令");
+        emit_login_status(&app, "reload", "刷新指令已发送");
         Ok(())
     } else {
         emit_login_status(&app, "reload", "窗口尚未创建，正在重新打开…");
