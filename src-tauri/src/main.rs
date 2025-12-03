@@ -30,32 +30,25 @@ async fn open_login_window(app: tauri::AppHandle) -> Result<(), String> {
 
     println!("登录窗口已创建");
 
-    let window_for_timer = login_window.clone();
-    let app_for_timer = app.clone();
+    let window_for_inject = login_window.clone();
     
     tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+        tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
         
-        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3));
-        let mut attempts = 0;
-        let max_attempts = 60;
-        
-        loop {
-            interval.tick().await;
-            attempts += 1;
-            
-            if attempts > max_attempts {
-                println!("停止捕获检查（超时）");
-                break;
-            }
-            
-            if window_for_timer.is_closable().is_err() {
-                println!("登录窗口已关闭");
-                break;
-            }
-            
-            let capture_script = r#"
-                new Promise((resolve) => {
+        let inject_script = r#"
+            (function() {
+                console.log('Tauri login capture script loading...');
+                
+                window.__TAURI_LOGIN_CAPTURE__ = {
+                    token: '',
+                    cookies: '',
+                    url: '',
+                    allData: {},
+                    timestamp: '',
+                    updated: false
+                };
+                
+                function captureAndStore() {
                     try {
                         let token = '';
                         let allData = {};
@@ -91,6 +84,7 @@ async fn open_login_window(app: tauri::AppHandle) -> Result<(), String> {
                         }
                         
                         let cookies = document.cookie;
+                        
                         if (cookies) {
                             let cookiePairs = cookies.split(';');
                             for (let pair of cookiePairs) {
@@ -110,130 +104,201 @@ async fn open_login_window(app: tauri::AppHandle) -> Result<(), String> {
                             }
                         }
                         
-                        resolve({
-                            token: token,
-                            cookies: cookies,
-                            url: window.location.href,
-                            allData: JSON.stringify(allData),
-                            timestamp: new Date().toISOString()
-                        });
+                        if (token || cookies) {
+                            window.__TAURI_LOGIN_CAPTURE__ = {
+                                token: token,
+                                cookies: cookies,
+                                url: window.location.href,
+                                allData: allData,
+                                timestamp: new Date().toISOString(),
+                                updated: true
+                            };
+                            console.log('Captured login data:', window.__TAURI_LOGIN_CAPTURE__);
+                        }
                     } catch (e) {
-                        resolve({
-                            error: e.toString(),
-                            token: '',
-                            cookies: document.cookie || '',
-                            url: window.location.href,
-                            allData: '{}',
-                            timestamp: new Date().toISOString()
-                        });
+                        console.error('Error in captureAndStore:', e);
                     }
-                });
-            "#;
-            
-            match window_for_timer.eval(capture_script) {
-                Ok(_) => {
-                    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
-                    
-                    if let Some(main_window) = app_for_timer.get_webview_window("main") {
-                        let _ = main_window.emit("checking-login", ());
-                    }
-                },
-                Err(e) => {
-                    println!("捕获数据失败: {}", e);
                 }
-            }
-        }
-    });
-
-    let app_for_script = app.clone();
-    let window_for_script = login_window.clone();
-    
-    tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-        
-        let inject_script = r#"
-            (function() {
+                
                 const originalSetItem = localStorage.setItem;
                 localStorage.setItem = function(key, value) {
                     console.log('localStorage.setItem:', key, value);
+                    originalSetItem.apply(this, arguments);
                     
                     if (key.toLowerCase().includes('token') || 
                         key.toLowerCase().includes('auth') ||
                         key.toLowerCase().includes('session') ||
                         key.toLowerCase().includes('user')) {
-                        
-                        window.__TAURI_INVOKE__('capture_login_data', {
-                            token: value,
-                            cookies: document.cookie,
-                            url: window.location.href,
-                            source: 'localStorage.' + key,
-                            timestamp: new Date().toISOString()
-                        }).catch(e => console.error('Failed to send to Tauri:', e));
+                        captureAndStore();
                     }
-                    
-                    return originalSetItem.apply(this, arguments);
                 };
                 
-                setInterval(function() {
-                    let token = '';
-                    let allData = {};
+                const originalSessionSetItem = sessionStorage.setItem;
+                sessionStorage.setItem = function(key, value) {
+                    console.log('sessionStorage.setItem:', key, value);
+                    originalSessionSetItem.apply(this, arguments);
                     
-                    try {
-                        if (typeof localStorage !== 'undefined') {
-                            for (let i = 0; i < localStorage.length; i++) {
-                                let key = localStorage.key(i);
-                                let value = localStorage.getItem(key);
-                                allData['localStorage_' + key] = value;
-                                
-                                if (key.toLowerCase().includes('token') || 
-                                    key.toLowerCase().includes('auth') ||
-                                    key.toLowerCase().includes('session') ||
-                                    key.toLowerCase().includes('user')) {
-                                    if (!token) token = value;
-                                }
-                            }
-                        }
-                        
-                        if (typeof sessionStorage !== 'undefined') {
-                            for (let i = 0; i < sessionStorage.length; i++) {
-                                let key = sessionStorage.key(i);
-                                let value = sessionStorage.getItem(key);
-                                allData['sessionStorage_' + key] = value;
-                                
-                                if (key.toLowerCase().includes('token') || 
-                                    key.toLowerCase().includes('auth') ||
-                                    key.toLowerCase().includes('session') ||
-                                    key.toLowerCase().includes('user')) {
-                                    if (!token) token = value;
-                                }
-                            }
-                        }
-                        
-                        let cookies = document.cookie;
-                        
-                        if (token || cookies) {
-                            let dataStr = JSON.stringify(allData);
-                            window.__TAURI_INVOKE__('capture_login_data', {
-                                token: token,
-                                cookies: cookies,
-                                url: window.location.href,
-                                allData: dataStr,
-                                timestamp: new Date().toISOString()
-                            }).catch(e => {});
-                        }
-                    } catch (e) {
-                        console.error('Error in periodic check:', e);
+                    if (key.toLowerCase().includes('token') || 
+                        key.toLowerCase().includes('auth') ||
+                        key.toLowerCase().includes('session') ||
+                        key.toLowerCase().includes('user')) {
+                        captureAndStore();
                     }
-                }, 3000);
+                };
                 
-                console.log('Tauri login capture script injected');
+                setInterval(captureAndStore, 2000);
+                
+                console.log('Tauri login capture script injected successfully');
             })();
         "#;
         
-        if let Err(e) = window_for_script.eval(inject_script) {
+        if let Err(e) = window_for_inject.eval(inject_script) {
             println!("注入脚本失败: {}", e);
         } else {
             println!("已注入捕获脚本");
+        }
+    });
+
+    let window_for_timer = login_window.clone();
+    let app_for_timer = app.clone();
+    
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+        
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(2));
+        let mut attempts = 0;
+        let max_attempts = 120;
+        let mut last_token = String::new();
+        
+        loop {
+            interval.tick().await;
+            attempts += 1;
+            
+            if attempts > max_attempts {
+                println!("停止捕获检查（超时）");
+                break;
+            }
+            
+            if window_for_timer.is_closable().is_err() {
+                println!("登录窗口已关闭");
+                break;
+            }
+            
+            let read_script = r#"
+                (function() {
+                    try {
+                        if (window.__TAURI_LOGIN_CAPTURE__ && window.__TAURI_LOGIN_CAPTURE__.updated) {
+                            let data = window.__TAURI_LOGIN_CAPTURE__;
+                            let result = JSON.stringify({
+                                token: data.token || '',
+                                cookies: data.cookies || '',
+                                url: data.url || window.location.href,
+                                allData: JSON.stringify(data.allData || {}),
+                                timestamp: data.timestamp || new Date().toISOString()
+                            });
+                            let metaElement = document.createElement('meta');
+                            metaElement.name = '__tauri_captured_data__';
+                            metaElement.content = result;
+                            let oldMeta = document.querySelector('meta[name="__tauri_captured_data__"]');
+                            if (oldMeta) {
+                                oldMeta.remove();
+                            }
+                            document.head.appendChild(metaElement);
+                        }
+                    } catch (e) {
+                        console.error('Error storing data in meta:', e);
+                    }
+                })();
+            "#;
+            
+            if let Err(e) = window_for_timer.eval(read_script) {
+                println!("注入读取脚本失败: {}", e);
+                continue;
+            }
+            
+            tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+            
+            let extract_script = r#"
+                (function() {
+                    let metaElement = document.querySelector('meta[name="__tauri_captured_data__"]');
+                    if (metaElement) {
+                        document.title = 'DATA:' + metaElement.content;
+                    } else {
+                        document.title = 'NO_DATA';
+                    }
+                })();
+            "#;
+            
+            if let Err(e) = window_for_timer.eval(extract_script) {
+                println!("提取数据失败: {}", e);
+                continue;
+            }
+            
+            tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+            
+            match window_for_timer.title() {
+                Ok(title) => {
+                    if title.starts_with("DATA:") {
+                        let data_str = &title[5..];
+                        
+                        match serde_json::from_str::<serde_json::Value>(data_str) {
+                            Ok(data) => {
+                                if let (Some(token), Some(cookies), Some(url), Some(timestamp)) = (
+                                    data.get("token").and_then(|v| v.as_str()),
+                                    data.get("cookies").and_then(|v| v.as_str()),
+                                    data.get("url").and_then(|v| v.as_str()),
+                                    data.get("timestamp").and_then(|v| v.as_str())
+                                ) {
+                                    if !token.is_empty() && token != last_token {
+                                        println!("========== 捕获到登录数据 ==========");
+                                        println!("Token: {}", token);
+                                        println!("Cookies: {}", cookies);
+                                        println!("URL: {}", url);
+                                        println!("时间戳: {}", timestamp);
+                                        
+                                        let all_data_str = data.get("allData")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or("{}");
+                                        println!("全部数据: {}", all_data_str);
+                                        println!("===================================");
+                                        
+                                        let login_data = serde_json::json!({
+                                            "token": token,
+                                            "cookies": cookies,
+                                            "url": url,
+                                            "allData": all_data_str,
+                                            "timestamp": timestamp
+                                        });
+                                        
+                                        if let Some(main_window) = app_for_timer.get_webview_window("main") {
+                                            match main_window.emit("login-data-captured", login_data) {
+                                                Ok(_) => {
+                                                    println!("已发送数据到主窗口");
+                                                    last_token = token.to_string();
+                                                }
+                                                Err(e) => {
+                                                    println!("发送事件失败: {}", e);
+                                                }
+                                            }
+                                        }
+                                        
+                                        let reset_title = r#"
+                                            document.title = '登录 - 租好玩';
+                                        "#;
+                                        let _ = window_for_timer.eval(reset_title);
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                println!("解析数据失败: {}", e);
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    println!("获取标题失败: {}", e);
+                }
+            }
         }
     });
 
@@ -250,7 +315,7 @@ async fn capture_login_data(
     timestamp: String,
     app: tauri::AppHandle
 ) -> Result<(), String> {
-    println!("========== 捕获到登录数据 ==========");
+    println!("========== 收到手动捕获的登录数据 ==========");
     println!("Token: {}", token);
     println!("Cookies: {}", cookies);
     println!("URL: {}", url);
@@ -261,7 +326,7 @@ async fn capture_login_data(
         println!("全部数据: {}", data);
     }
     println!("时间戳: {}", timestamp);
-    println!("===================================");
+    println!("=========================================");
     
     let login_data = serde_json::json!({
         "token": token,

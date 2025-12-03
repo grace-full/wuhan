@@ -15,11 +15,55 @@
         "width": 1000,
         "height": 700,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "label": "main"
       }
     ],
     "security": {
-      "csp": "default-src 'self' 'unsafe-inline' 'unsafe-eval' https: http: data: blob:; img-src 'self' https: http: data: blob:; media-src 'self' https: http: data: blob:; connect-src 'self' https: http: ws: wss:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';"
+      "csp": "default-src 'self' 'unsafe-inline' 'unsafe-eval' https: http: data: blob:; img-src 'self' https: http: data: blob:; media-src 'self' https: http: data: blob:; connect-src 'self' https: http: ws: wss:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; upgrade-insecure-requests;",
+      "capabilities": [
+        {
+          "identifier": "main-capability",
+          "description": "Main window capabilities",
+          "windows": ["main"],
+          "permissions": [
+            "core:window:allow-create",
+            "core:window:allow-center",
+            "core:window:allow-close",
+            "core:window:allow-destroy",
+            "core:window:allow-hide",
+            "core:window:allow-show",
+            "core:window:allow-maximize",
+            "core:window:allow-minimize",
+            "core:window:allow-unmaximize",
+            "core:window:allow-unminimize",
+            "core:window:allow-set-title",
+            "core:window:allow-set-size",
+            "core:window:allow-set-position",
+            "core:window:allow-set-focus",
+            "core:window:allow-set-resizable",
+            "core:window:allow-is-closable",
+            "core:event:allow-listen",
+            "core:event:allow-unlisten",
+            "core:event:allow-emit",
+            "core:event:allow-emit-to",
+            "core:webview:allow-webview-position",
+            "core:webview:allow-webview-size",
+            "core:webview:allow-internal-toggle-devtools"
+          ]
+        },
+        {
+          "identifier": "login-window-capability",
+          "description": "Login window capabilities",
+          "windows": ["login"],
+          "permissions": [
+            "core:window:allow-close",
+            "core:window:allow-is-closable",
+            "core:event:allow-emit",
+            "core:event:allow-emit-to"
+          ]
+        }
+      ]
     }
   },
   "bundle": {
