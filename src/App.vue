@@ -44,6 +44,25 @@
             清空结果
           </el-button>
         </div>
+
+        <el-divider content-position="left">若弹窗异常，可使用以下排障工具</el-divider>
+        <div class="support-panel">
+          <el-alert
+            v-if="latestLoginStatus"
+            :title="PHASE_META[latestLoginStatus.phase]?.label || '窗口状态'"
+            :type="PHASE_META[latestLoginStatus.phase]?.type || 'info'"
+            :description="latestLoginStatus.message"
+            show-icon
+            :closable="false"
+          />
+          <p v-else class="support-tip">暂未收到窗口状态事件，若窗口未弹出可点击下方按钮尝试处理。</p>
+          <div class="support-actions">
+            <el-button text type="primary" @click="reloadLoginWindow">刷新窗口</el-button>
+            <el-button text type="info" @click="focusLoginWindow">找回/置顶</el-button>
+            <el-button text type="danger" @click="forceCloseLoginWindow">强制关闭</el-button>
+            <el-button text @click="openLoginDevtools">打开调试面板</el-button>
+          </div>
+        </div>
       </el-card>
 
       <el-card class="result-card">
@@ -57,7 +76,7 @@
           <el-descriptions :column="1" border>
             <el-descriptions-item label="Token">
               <div class="desc-line">
-                <code class="token-value">{{ payload.token || "未检测到 token" }}</code>
+                <code class="token-value">{{ payload.token || '未检测到 token' }}</code>
                 <el-button
                   v-if="payload.token"
                   type="primary"
@@ -96,6 +115,27 @@
         <el-empty v-else description="暂未捕获到 token / cookie" />
       </el-card>
 
+      <el-card class="status-card">
+        <template #header>
+          <div class="card-header">
+            <span>登录窗口状态日志</span>
+            <span class="hint">记录最近的弹窗状态与排障操作</span>
+          </div>
+        </template>
+        <el-empty v-if="loginStatuses.length === 0" description="暂无状态记录" />
+        <el-timeline v-else>
+          <el-timeline-item
+            v-for="item in loginStatuses"
+            :key="item.timestamp"
+            :timestamp="formatTimestamp(item.timestamp)"
+            :type="PHASE_META[item.phase]?.type || 'info'"
+          >
+            <p class="status-phase">{{ PHASE_META[item.phase]?.label || item.phase }}</p>
+            <p class="status-message">{{ item.message }}</p>
+          </el-timeline-item>
+        </el-timeline>
+      </el-card>
+
       <el-card class="history-card">
         <template #header>
           <div class="card-header">
@@ -122,7 +162,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { listen, type Event, type UnlistenFn } from "@tauri-apps/api/event";
 import { ElMessage } from "element-plus";
 import { UserFilled } from "@element-plus/icons-vue";
 
@@ -134,17 +174,48 @@ interface LoginPayload {
 }
 
 type StatusKey = "idle" | "opening" | "waiting" | "received";
+type AlertType = "success" | "info" | "warning" | "error";
+
+type PhaseKey =
+  | "created"
+  | "reuse"
+  | "page-ready"
+  | "captured"
+  | "reload"
+  | "focus"
+  | "devtools"
+  | "close-requested"
+  | "closed";
+
+interface LoginWindowStatusPayload {
+  phase: PhaseKey;
+  message: string;
+  timestamp: number;
+}
 
 const status = ref<StatusKey>("idle");
 const payload = ref<LoginPayload | null>(null);
 const history = ref<LoginPayload[]>([]);
+const loginStatuses = ref<LoginWindowStatusPayload[]>([]);
 const isOpening = ref(false);
 
-const STATUS_MAP: Record<StatusKey, { text: string; type: "info" | "success" | "warning" | "danger" }> = {
+const STATUS_MAP: Record<StatusKey, { text: string; type: AlertType }> = {
   idle: { text: "等待操作", type: "info" },
   opening: { text: "正在打开登录窗口", type: "warning" },
   waiting: { text: "请在弹出的页面完成登录", type: "warning" },
   received: { text: "已捕获凭证", type: "success" },
+};
+
+const PHASE_META: Record<PhaseKey, { label: string; type: AlertType }> = {
+  created: { label: "窗口已创建", type: "info" },
+  reuse: { label: "窗口已重新唤起", type: "info" },
+  "page-ready": { label: "脚本已注入", type: "success" },
+  captured: { label: "完成捕获", type: "success" },
+  reload: { label: "执行刷新", type: "warning" },
+  focus: { label: "尝试置顶", type: "info" },
+  devtools: { label: "调试面板", type: "info" },
+  "close-requested": { label: "用户尝试关闭窗口", type: "warning" },
+  closed: { label: "窗口已关闭", type: "warning" },
 };
 
 const formatTimestamp = (value?: number) => {
@@ -155,22 +226,46 @@ const formatTimestamp = (value?: number) => {
 const statusMeta = computed(() => STATUS_MAP[status.value]);
 const buttonLoading = computed(() => isOpening.value || status.value === "waiting");
 const formattedTime = computed(() => formatTimestamp(payload.value?.captured_at));
+const latestLoginStatus = computed(() => loginStatuses.value[0] ?? null);
 
-let unlisten: UnlistenFn | null = null;
+const unsubscribers: UnlistenFn[] = [];
+
+const registerListener = async <T>(event: string, handler: (event: Event<T>) => void) => {
+  const unlisten = await listen<T>(event, handler);
+  unsubscribers.push(unlisten);
+};
+
+const handleLoginWindowStatus = (statusEvent: LoginWindowStatusPayload) => {
+  loginStatuses.value = [statusEvent, ...loginStatuses.value].slice(0, 8);
+
+  if (["created", "reuse", "page-ready"].includes(statusEvent.phase)) {
+    status.value = "waiting";
+    isOpening.value = false;
+  }
+
+  if (statusEvent.phase === "closed" && status.value !== "received") {
+    status.value = "idle";
+    isOpening.value = false;
+  }
+};
 
 onMounted(async () => {
-  unlisten = await listen<LoginPayload>("login-info", (event) => {
+  await registerListener<LoginPayload>("login-info", (event) => {
     payload.value = event.payload;
     history.value = [event.payload, ...history.value].slice(0, 5);
     status.value = "received";
     isOpening.value = false;
     ElMessage.success("已成功捕获登录 token / cookie");
   });
+
+  await registerListener<LoginWindowStatusPayload>("login-window-status", (event) => {
+    handleLoginWindowStatus(event.payload);
+  });
 });
 
 onBeforeUnmount(() => {
-  unlisten?.();
-  unlisten = null;
+  unsubscribers.forEach((dispose) => dispose());
+  unsubscribers.length = 0;
 });
 
 const openLoginWindow = async () => {
@@ -190,6 +285,20 @@ const openLoginWindow = async () => {
     isOpening.value = false;
   }
 };
+
+const invokeLoginCommand = async (command: string, successMessage: string, errorMessage: string) => {
+  try {
+    await invoke(command);
+    ElMessage.success(successMessage);
+  } catch (error) {
+    ElMessage.error(`${errorMessage}：${String(error)}`);
+  }
+};
+
+const reloadLoginWindow = () => invokeLoginCommand("reload_login_window", "刷新指令已发送", "刷新失败");
+const forceCloseLoginWindow = () => invokeLoginCommand("close_login_window", "关闭指令已发送", "关闭失败");
+const focusLoginWindow = () => invokeLoginCommand("focus_login_window", "已尝试置顶登录窗口", "置顶失败");
+const openLoginDevtools = () => invokeLoginCommand("open_login_devtools", "请留意调试面板", "打开调试面板失败");
 
 const resetPayload = () => {
   payload.value = null;
@@ -275,6 +384,7 @@ const summarizeCookie = (cookie?: string | null) => {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .status-card,
   .history-card {
     grid-column: span 2;
   }
@@ -329,6 +439,39 @@ const summarizeCookie = (cookie?: string | null) => {
 
 .cookie-copy {
   margin-top: 8px;
+}
+
+.support-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.support-tip {
+  margin: 0;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.support-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.support-actions .el-button {
+  padding: 0 6px;
+}
+
+.status-phase {
+  margin: 0;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.status-message {
+  margin: 4px 0 0;
+  color: #475569;
 }
 
 .history-token,
