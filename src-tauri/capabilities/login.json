@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "login-window",
+  "description": "Permissions for the 租号玩登录 WebView，包括远程页面调用 Tauri API 的能力。",
+  "windows": ["login-window"],
+  "remote": {
+    "urls": [
+      "https://zu.zuhaowan.com/*",
+      "https://*.zu.zuhaowan.com/*"
+    ]
+  },
+  "permissions": [
+    "core:default"
+  ]
+}
