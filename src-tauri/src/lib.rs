@@ -1,7 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
-use tauri::{AppHandle, Manager, Url, WebviewUrl, WebviewWindowBuilder, Window};
+use tauri::{AppHandle, Emitter, Manager, Url, WebviewUrl, WebviewWindowBuilder, Window};
 
 const LOGIN_WINDOW_LABEL: &str = "login-window";
 const LOGIN_URL: &str = "https://zu.zuhaowan.com";
@@ -69,7 +69,7 @@ fn report_login_state(
             .as_millis(),
     };
 
-    app.emit_all("login-info", &payload)
+    app.emit("login-info", &payload)
         .map_err(|e| e.to_string())?;
 
     if window.label() == LOGIN_WINDOW_LABEL {
