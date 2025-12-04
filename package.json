@@ -1,0 +1,28 @@
+{
+  "name": "electron-vue3-elementplus-login-demo",
+  "version": "1.0.0",
+  "description": "Electron + Vue3 + Element-Plus demo capturing token and cookie from third-party login.",
+  "main": "electron/main.cjs",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "dev": "cross-env VITE_DEV_SERVER_URL=http://localhost:5173 concurrently -k \"npm:dev:renderer\" \"npm:dev:main\"",
+    "dev:renderer": "vite",
+    "dev:main": "wait-on tcp:5173 && electron .",
+    "build": "vite build",
+    "start": "cross-env NODE_ENV=production electron .",
+    "lint": "echo \"No linting configured\""
+  },
+  "dependencies": {
+    "element-plus": "^2.7.6",
+    "vue": "^3.4.15"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.2",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "^28.2.0",
+    "vite": "^5.0.11",
+    "wait-on": "^7.0.1"
+  }
+}
