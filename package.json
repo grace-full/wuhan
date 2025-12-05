@@ -11,7 +11,10 @@
     "dev:main": "wait-on tcp:5173 && electron .",
     "build": "vite build",
     "start": "cross-env NODE_ENV=production electron .",
-    "lint": "echo \"No linting configured\""
+    "lint": "echo \"No linting configured\"",
+    "electron:build": "electron-builder",
+    "electron:build:win": "electron-builder --win --x64",
+    "electron:build:dir": "electron-builder --dir"
   },
   "dependencies": {
     "element-plus": "^2.7.6",
@@ -21,8 +24,39 @@
     "@vitejs/plugin-vue": "^5.0.2",
     "concurrently": "^8.2.2",
     "cross-env": "^7.0.3",
-    "electron": "^28.2.0",
+    "electron": "^28.3.3",
+    "electron-builder": "^26.0.12",
     "vite": "^5.0.11",
     "wait-on": "^7.0.1"
+  },
+  "build": {
+    "appId": "com.example.electron-vue3-elementplus",
+    "productName": "Electron Vue3 Login Demo",
+    "directories": {
+      "output": "dist/electron"
+    },
+    "files": [
+      "dist/renderer/**/*",
+      "electron/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
   }
 }
